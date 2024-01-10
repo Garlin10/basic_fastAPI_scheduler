@@ -2,62 +2,49 @@ from fastapi import FastAPI
 import schedule
 import threading
 import time
-
+import uvicorn
+import logging
 app = FastAPI()
 
-# Job Scheduler Code
-class JobScheduler:
-    def __init__(self):
-        self.job = None
-        self.is_job_scheduled = False
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("uvicorn.access")
+def job():
+    logging.info("Job started.")
+    try:
+        #Insert your scheduled job here!
+        print("Job is running at the momment")
+    except Exception as e:
+        logging.error(f"An error occurred: {str(e)}")
+    finally:
+        logging.info("Job finished.")
 
-    def do_job(self):
-        print("Job is running...")
+class SchedulerThread(threading.Thread):
+    @classmethod
+    def run(cls):
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
 
-    def start_job(self):
-        if not self.is_job_scheduled:
-            self.job = schedule.every(1).seconds.do(self.do_job)
-            self.is_job_scheduled = True
-            return "Job started."
-        else:
-            return "Job is already scheduled."
+scheduler_thread = SchedulerThread()
 
-    def stop_job(self):
-        if self.is_job_scheduled:
-            schedule.cancel_job(self.job)
-            self.is_job_scheduled = False
-            return "Job stopped."
-        else:
-            return "No job is scheduled."
+@app.get("/start")
+def start_scheduling():
+    if not schedule.jobs:
+        schedule.every(2).seconds.do(job)
+        if not scheduler_thread.is_alive():
+            scheduler_thread.start()
+        return {"message": "Scheduling started."}
+    return {"message": "Scheduling is already running."}
 
-    def get_job_status(self):
-        return "Scheduled" if self.is_job_scheduled else "Not scheduled"
+@app.get("/stop")
+def stop_scheduling():
+    schedule.clear()
+    return {"message": "Scheduling stopped."}
 
-scheduler = JobScheduler()
+@app.get("/status")
+def is_scheduling_running():
+    return {"running": bool(schedule.jobs)}
 
-# Endpoint to start the job
-@app.get("/start-job")
-def start_job():
-    return {"message": scheduler.start_job()}
 
-# Endpoint to stop the job
-@app.get("/stop-job")
-def stop_job():
-    return {"message": scheduler.stop_job()}
-
-# Endpoint to get job status
-@app.get("/job-status")
-def job_status():
-    return {"status": scheduler.get_job_status()}
-
-# Background task to run scheduled jobs
-def run_schedule():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-# Start the background task
-threading.Thread(target=run_schedule, daemon=True).start()
-
-# Run the server
-# uvicorn.run(app, host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
